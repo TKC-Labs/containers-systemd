@@ -1,0 +1,25 @@
+ARG VERSION=10
+
+FROM almalinux:${VERSION} AS base
+
+# Ignoring:
+#
+# DL3041 warning: Specify version with `dnf install -y <package>-<version>`.
+#
+# hadolint ignore=DL3041
+RUN dnf update -y && dnf install -y systemd procps-ng openssh-server python3 python3-pip curl git && \
+    if [ ! -d /root/.ssh ]; then mkdir --mode=0700 /root/.ssh; fi && \
+    # Clean up the image
+    dnf clean all
+
+WORKDIR /root
+
+RUN curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/download/v2025.09.03/bootstrap-salt.sh && \
+  chmod 0755 ./bootstrap-salt.sh && \
+  /root/bootstrap-salt.sh -i minion-id stable 3006.16 || true && \
+  dnf clean all && \
+  rm /etc/systemd/system/multi-user.target.wants/salt-minion.service
+
+EXPOSE 22
+
+CMD [ "/sbin/init" ]

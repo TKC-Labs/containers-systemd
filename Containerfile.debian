@@ -1,0 +1,27 @@
+ARG DEBIAN_VERSION=12
+
+FROM debian:${DEBIAN_VERSION} AS base
+
+# Ignoring:
+#
+# DL3008 warning: Pin versions in apt get install. Instead of `apt-get install <package>` use `apt-get install <package>=<version>`
+# DL3015 info: Avoid additional packages by specifying `--no-install-recommends`
+#
+# hadolint ignore=DL3008,DL3015
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get upgrade -y && \
+  apt-get install -y systemd openssh-server openssh-client curl git python3 python3-pip vim-tiny && \
+  # Clean up the image
+  rm -rf /var/lib/apt/lists/* && \
+  apt-get clean
+
+WORKDIR /root
+
+RUN curl -o bootstrap-salt.sh -L https://github.com/saltstack/salt-bootstrap/releases/download/v2025.09.03/bootstrap-salt.sh && \
+  chmod 0755 ./bootstrap-salt.sh && \
+  /root/bootstrap-salt.sh -i minion-id stable 3006.16 || true && \
+  apt-get clean && \
+  rm /etc/systemd/system/multi-user.target.wants/salt-minion.service
+
+EXPOSE 22
+
+CMD [ "/sbin/init" ]
