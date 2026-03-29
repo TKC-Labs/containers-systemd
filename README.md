@@ -1,19 +1,26 @@
-# Systemd podman containerfiles
+# Systemd containerfiles
+
+Sytemd containers for testing
 
 ## Building Images
 
-*Trailing . is intentional*
+### systemd-almalinux
 
 ```bash
-# Default Debian version is 12
-podman build -f Containerfile.debian -t systemd:debian12 .
+# Build default image (AlmaLinux 10):
+podman build -t systemd-almalinux:latest -t systemd-almalinux:10 -f Containerfile.almalinux .
 
-# Build for other Debian version, like 11
-podman build -f Containerfile.debian --build-arg VERSION=11 -t systemd:debian11 .
+# Build specific version image (AlmaLinux 9)
+podman build -t systemd-almalinux:9 -f Containerfile.almalinux --build-arg VERSION=9 .
+```
 
-# Default almalinux version is 10
-podman build -f Containerfile.almalinux -t systemd:almalinux10 .
+### systemd-debian
 
-# Build for other AlmaLinux version, like 9
-podman build -f Containerfile.almalinux -t systemd:almalinux9 .
+```bash
+# Build default image (Debian 13):
+podman build -t systemd-debian:latest -t systemd-debian:13 -f Containerfile.debian .
+
+# Build specific version image (Debian 11 or 12):
+podman build -t systemd-debian:12 -f Containerfile.debian --build-arg VERSION=12 .
+podman build -t systemd-debian:11 -f Containerfile.debian --build-arg VERSION=11 .
 ```
