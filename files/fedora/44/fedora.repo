@@ -1,3 +1,5 @@
+# NOTE: Containerfile.fedora's dnf invocations pass --setopt=zchunk=False —
+# the fedora-proxy Nexus repo does not proxy Fedora's .zck metadata variant.
 [fedora]
 name=Fedora $releasever - $basearch
 # metalink=https://mirrors.fedoraproject.org/metalink?repo=fedora-$releasever&arch=$basearch
