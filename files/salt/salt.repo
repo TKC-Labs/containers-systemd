@@ -1,0 +1,9 @@
+[salt]
+name=Salt Project $releasever - $basearch
+# baseurl=https://packages.broadcom.com/artifactory/saltproject-rpm/
+baseurl=https://nexus.tkclabs.io:8443/repository/saltproject-rpm-proxy/
+enabled=1
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/SALT-PROJECT-GPG-PUBKEY.pgp
+metadata_expire=86400
+enabled_metadata=1
