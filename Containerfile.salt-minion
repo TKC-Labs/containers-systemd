@@ -1,0 +1,42 @@
+# salt-minion
+#
+# A systemd-almalinux test target running salt-minion. Minion configuration is
+# deliberately left at package defaults (master: salt, minion id from hostname);
+# configure it at run time or in a thin layer on top of this image.
+#
+# Build the default image with:
+#   podman build -t salt-minion:latest -t salt-minion:v3006.27 -f Containerfile.salt-minion .
+#
+# Build versioned image with:
+#   podman build -t salt-minion:v3006.6 -f Containerfile.salt-minion --build-arg SALT_VERSION=3006.6 .
+#
+# Build against a locally built base instead of the Nexus registry with:
+#   podman build -t salt-minion:latest -f Containerfile.salt-minion --build-arg BASE_REGISTRY= .
+#
+ARG BASE_REGISTRY=nexus.tkclabs.io:8443/
+ARG VERSION=10
+
+FROM ${BASE_REGISTRY}systemd-almalinux:${VERSION}
+
+ARG SALT_VERSION=3006.27
+
+# ---------------------------------------------------------------------------
+# The TKC Labs root CA, the Nexus AlmaLinux repos, the masked-units list and the
+# journald->console drop-in all come from the base image and are not repeated.
+#
+# Salt RPMs come from the Nexus proxy of the Broadcom repo. That repo is flat and
+# version-agnostic, so the version pin lives on the dnf command line rather than
+# in salt.repo, and one repo file serves every supported Salt version.
+# ---------------------------------------------------------------------------
+COPY files/salt/SALT-PROJECT-GPG-PUBKEY.pgp /etc/pki/rpm-gpg/SALT-PROJECT-GPG-PUBKEY.pgp
+COPY files/salt/salt.repo /etc/yum.repos.d/salt.repo
+
+RUN dnf install -y salt-${SALT_VERSION} \
+  salt-minion-${SALT_VERSION} \
+  && dnf clean all \
+  && rm -rf /var/cache/dnf
+
+RUN systemctl enable salt-minion.service
+
+WORKDIR /root
+CMD [ "/sbin/init" ]
