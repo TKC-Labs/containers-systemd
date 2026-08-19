@@ -1,11 +1,11 @@
 Types: deb
-URIs: https://nexus.tkclabs.io:8443/repository/debian-bullseye
+URIs: https://nexus.tkclabs.io:8443/repository/debian-bullseye-proxy/
 Suites: bullseye bullseye-updates
 Components: main
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 
 Types: deb
-URIs: https://nexus.tkclabs.io:8443/repository/debian-security-bullseye/
+URIs: https://nexus.tkclabs.io:8443/repository/debian-bullseye-security-proxy/
 Suites: bullseye-security
 Components: main
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg

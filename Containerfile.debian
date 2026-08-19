@@ -13,15 +13,14 @@ FROM debian:${VERSION}
 
 ARG VERSION=13
 
-# Download curl so we can get the root ca
-RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
-  apt-get install curl -y
-
 # Setup our local repo mirrors
-RUN echo "$(curl -s --insecure https://vault.tkclabs.io:8200/v1/root_ca/ca/pem && echo)" \
-  > /usr/local/share/ca-certificates/tkclabs-root-ca.crt && \
+COPY files/ca/TKC-Labs-Root-CA-2026-2036.crt /usr/local/share/ca-certificates/TKC-Labs-Root-CA-2026-2036.crt
+
+# ca-certificates provides update-ca-certificates; the base debian image does
+# not include it (it was previously pulled in transitively by installing curl).
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+  apt-get install -y ca-certificates && \
   update-ca-certificates && \
-  apt-get clean && \
   rm -rf /etc/apt/sources.list
 
 # Deploy sources file for local cache

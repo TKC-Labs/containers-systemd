@@ -1,13 +1,11 @@
 Types: deb deb-src
-#URIs: mirror+file:///etc/apt/mirrors/debian.list
-URIs: https://nexus.tkclabs.io:8443/repository/debian-trixie/
+URIs: https://nexus.tkclabs.io:8443/repository/debian-trixie-proxy/
 Suites: trixie trixie-updates trixie-backports
 Components: main
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 
 Types: deb deb-src
-#URIs: mirror+file:///etc/apt/mirrors/debian-security.list
-URIs: https://nexus.tkclabs.io:8443/repository/debian-security-trixie/
+URIs: https://nexus.tkclabs.io:8443/repository/debian-trixie-security-proxy/
 Suites: trixie-security
 Components: main
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
