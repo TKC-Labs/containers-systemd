@@ -102,8 +102,9 @@ production master.
 2. `dnf install -y salt-${SALT_VERSION} salt-minion-${SALT_VERSION}`, same cleanup.
 3. `systemctl enable salt-minion.service`.
 
-No configuration. With the package default `master: salt`, running the controller
-with `--network-alias salt` is enough for a minimal two-container test.
+No configuration. With the package default `master: salt`, giving the controller
+the network alias `salt` on a user-defined podman network is enough for a minimal
+two-container test without writing any config into either image.
 
 ## Build commands
 
@@ -148,14 +149,42 @@ Images and tags to publish:
 `v3006.27`. Non-default distro versions (`almalinux:9`, `debian:11`, `debian:12`)
 are out of scope for this pass.
 
+## Running the images
+
+Podman on the build host is rootless with `short-name-mode = enforcing`, so a
+locally built image must be run by its fully qualified local name:
+
+```bash
+podman network create saltdev
+
+podman run -d --name salt-controller --network saltdev --network-alias salt \
+  --systemd=always localhost/salt-controller:v3006.27
+
+podman run -d --name minion01 --network saltdev \
+  --systemd=always localhost/salt-minion:v3006.27
+
+podman exec salt-controller salt '*' test.ping
+```
+
+A user-defined network (`saltdev`) is what provides DNS between containers — each
+container is resolvable by its `--name`. `--network-alias salt` adds a second name
+so the minions' untouched default `master: salt` resolves without configuring them.
+
+Bare `salt-controller:v3006.27` fails with `short-name resolution enforced but
+cannot prompt without a TTY`; use `localhost/…` locally or the fully qualified
+`nexus.tkclabs.io:8443/…` ref after publishing. Salt's 4505/4506 are above 1024,
+so they publish fine rootless with no port-mapping workaround.
+
 ## Documentation updates
 
-- `README.md` — build sections for both Salt images; a publishing section with the
-  login/tag/push commands.
+- `README.md` — build sections for both Salt images; a run section using the
+  `saltdev` network; a publishing section with the login/tag/push commands.
 - `CLAUDE.md` — seven Containerfiles, not five; the derived-image family and what
   it inherits; `saltproject-rpm-proxy` and the flat-repo pinning model; the
   vendored Salt key and when it must be rotated; `auto_accept` as an intentional
   test-only choice; the Nexus docker registry and the `BASE_REGISTRY` escape hatch.
+- Correct the existing `podman run … systemd-almalinux:10` example, which fails
+  under this host's enforcing short-name mode.
 
 ## Verification
 
@@ -164,8 +193,9 @@ are out of scope for this pass.
 3. `podman run -d --systemd=always` the controller; confirm `salt-master.service`
    and `salt-minion.service` are active and `/etc/salt/pki/master/master.{pem,pub}`
    exist with the right modes.
-4. Run a controller with `--network-alias salt` plus a minion on the same network;
-   confirm the minion key is auto-accepted and `salt '*' test.ping` answers.
+4. On a `saltdev` network, run the controller with `--network-alias salt` plus a
+   minion; confirm the minion key is auto-accepted (`salt-key -L`) and that
+   `salt '*' test.ping` answers for both the minion and the controller's own minion.
 5. Repeat 2–4 for `SALT_VERSION=3006.6`; confirm `salt --version` reports it.
 6. Confirm every published tag is listed by the Nexus `/v2/_catalog` and
    `/v2/<name>/tags/list` endpoints.
