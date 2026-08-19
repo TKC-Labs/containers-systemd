@@ -1,0 +1,165 @@
+# systemd-ubuntu
+#
+# Build the default image with:
+#   podman build -t systemd-ubuntu:latest -t systemd-ubuntu:26.04 -f Containerfile.ubuntu .
+#
+ARG VERSION=26.04
+
+FROM ubuntu:${VERSION}
+
+ARG VERSION=26.04
+
+# Setup our local repo mirrors
+COPY files/ca/TKC-Labs-Root-CA-2026-2036.crt /usr/local/share/ca-certificates/TKC-Labs-Root-CA-2026-2036.crt
+
+# ca-certificates provides update-ca-certificates; the base ubuntu image does
+# not include it (it was previously pulled in transitively by installing curl).
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+  apt-get install -y ca-certificates && \
+  update-ca-certificates && \
+  rm -rf /etc/apt/sources.list
+
+# Deploy sources file for local cache
+COPY files/ubuntu/${VERSION}/ubuntu.sources /etc/apt/sources.list.d/ubuntu.sources
+
+# Install necessary packages and clean up the image
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get upgrade -y && \
+  apt-get install -y git \
+  iproute2 \
+  openssh-client \
+  openssh-server \
+  procps \
+  python3 \
+  python3-venv \
+  sudo \
+  systemd \
+  vim-tiny && \
+  # Clean up the image
+  rm -rf /var/lib/apt/lists/* && \
+  apt-get clean
+
+# ---------------------------------------------------------------------------
+# Mask systemd units that are useless inside a container and are the
+# biggest contributors to the open-file explosion:
+#
+# systemd-udevd          – hardware device manager, no real hardware here
+# systemd-journald       – logging daemon, high fd usage; use docker logs instead
+# systemd-logind         – session/seat management, irrelevant in containers
+# systemd-networkd       – network config; container runtime owns networking
+# NetworkManager         – same as above
+# auditd                 – kernel audit subsystem, not available in containers
+# firewalld              – iptables management handled outside container
+# tuned                  – performance tuning daemon, unneeded
+# kdump                  – kernel crash dumps, irrelevant
+# sssd                   – identity/auth provider, unneeded for testing
+# rhsmcertd / insights   – Red Hat subscription/telemetry daemons
+# systemd-resolved       – DNS resolver; /etc/resolv.conf comes from runtime
+# chronyd / ntpd         – time sync, container inherits host clock
+# crond                  – cron, not needed for test targets
+# mdmonitor / lvm2-*     – storage daemons, no block devices
+# ---------------------------------------------------------------------------
+RUN systemctl mask \
+  systemd-udevd.service \
+  systemd-udevd-kernel.socket \
+  systemd-udevd-control.socket \
+  systemd-journald.service \
+  systemd-journald.socket \
+  systemd-journald-dev-log.socket \
+  systemd-journald-audit.socket \
+  systemd-logind.service \
+  systemd-networkd.service \
+  systemd-networkd.socket \
+  systemd-networkd-wait-online.service \
+  systemd-resolved.service \
+  NetworkManager.service \
+  NetworkManager-wait-online.service \
+  auditd.service \
+  firewalld.service \
+  tuned.service \
+  kdump.service \
+  sssd.service \
+  rhsmcertd.service \
+  insights-client.service \
+  chronyd.service \
+  crond.service \
+  mdmonitor.service \
+  lvm2-monitor.service \
+  dm-event.service \
+  multipathd.service \
+  systemd-hwdb-update.service \
+  sys-kernel-debug.mount \
+  kbrequest.target \
+  dev-hugepages.mount
+
+# ---------------------------------------------------------------------------
+# Enable only what we actually need: sshd
+# ---------------------------------------------------------------------------
+# hadolint ignore=DL3059
+# RUN systemctl enable ssh.service
+
+# ---------------------------------------------------------------------------
+# SSH configuration for ephemeral test containers.
+# - Allow root login (Ansible/pyinfra often default to root in test labs)
+# - Disable slow reverse-DNS lookups (cuts connect time dramatically)
+# - Disable PAM session noise that can stall logins without a real tty
+# ---------------------------------------------------------------------------
+# RUN mkdir -p /etc/ssh/sshd_config.d && \
+#     printf '%s\n' \
+#         'PermitRootLogin yes' \
+#         'PasswordAuthentication yes' \
+#         'UseDNS no' \
+#         'UsePAM yes' \
+#         'PrintMotd no' \
+#         'PrintLastLog no' \
+#         'GSSAPIAuthentication no' \
+#         'X11Forwarding no' \
+#         > /etc/ssh/sshd_config.d/99-container.conf
+
+# ---------------------------------------------------------------------------
+# Set a known root password (change or replace with key injection).
+# For key-based auth: drop your pubkey into /root/.ssh/authorized_keys
+# ---------------------------------------------------------------------------
+# ARG ROOT_PUBKEY="VALID_KEY"
+#   # hadolint ignore=DL4006
+# RUN echo 'root:TestPass!' | chpasswd && \
+#     mkdir -p /root/.ssh && \
+#     echo "${ROOT_PUBKEY}" > /root/.ssh/authorized_keys
+
+# Create a non-root test user for sudo-based testing
+# ARG TEST_USER=tkcadmin
+# ARG TEST_USER_PUBKEY="VALID_KEY"
+# # hadolint ignore=DL4006
+# RUN useradd -m -s /bin/bash ${TEST_USER} && \
+#     echo "${TEST_USER}:TestPass!" | chpasswd && \
+#     echo "${TEST_USER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${TEST_USER} && \
+#     mkdir -p /home/${TEST_USER}/.ssh && \
+#     echo "${TEST_USER_PUBKEY}" > /home/${TEST_USER}/.ssh/authorized_keys
+
+# ---------------------------------------------------------------------------
+# Ensure SSH host keys are generated at build time so the first
+# container start is not slowed by key generation.
+# ---------------------------------------------------------------------------
+# RUN ssh-keygen -A
+
+# ---------------------------------------------------------------------------
+# Journal / logging: redirect to stdout so `podman logs` works even
+# without journald. A minimal virtual console journal config keeps
+# any remaining systemd log output from eating fds.
+# ---------------------------------------------------------------------------
+RUN mkdir -p /etc/systemd/journald.conf.d && \
+    printf '%s' \
+      '[Journal]\n' \
+      'Storage=volatile\n' \
+      'Compress=no\n' \
+      'SplitMode=none\n' \
+      'RateLimitIntervalSec=0\n' \
+      'RateLimitBurst=0\n' \
+      'ForwardToSyslog=no\n' \
+      'ForwardToConsole=yes\n' \
+      'TTYPath=/dev/console\n' \
+      'MaxLevelConsole=warning\n' \
+      > /etc/systemd/journald.conf.d/container.conf
+
+WORKDIR /root
+# EXPOSE 22
+CMD [ "/sbin/init" ]
