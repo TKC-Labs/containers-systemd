@@ -4,11 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Five Containerfiles that build **systemd-enabled base images** (AlmaLinux, RockyLinux, Fedora, Debian, Ubuntu) for use as test targets — e.g. SSH-reachable hosts for Ansible/pyinfra/Salt runs. The images run `/sbin/init` as PID 1 so real systemd units can be exercised inside the container. There is no application code; the "source" is the five Containerfiles plus per-version repo/sources config under `files/`.
+Seven Containerfiles that build **systemd-enabled base images** (AlmaLinux,
+RockyLinux, Fedora, Debian, Ubuntu) and two **Salt test images** derived from the
+AlmaLinux one, for use as test targets — e.g. SSH-reachable hosts for
+Ansible/pyinfra/Salt runs. The images run `/sbin/init` as PID 1 so real systemd
+units can be exercised inside the container. There is no application code; the
+"source" is the seven Containerfiles plus per-version repo/sources config under
+`files/`.
 
-The five split into two families that share structure:
+The five base images split into two families that share structure:
 - **RPM/dnf** (`Containerfile.almalinux`, `Containerfile.rockylinux`, `Containerfile.fedora`) — dnf install, `.repo` files under `files/<distro>/<version>/`, CA trusted via `/etc/pki/ca-trust/source/anchors/`.
 - **APT** (`Containerfile.debian`, `Containerfile.ubuntu`) — apt install, deb822 `.sources` files under `files/<distro>/<version>/`, CA trusted via `/usr/local/share/ca-certificates/`.
+
+The two Salt images (`Containerfile.salt-controller`, `Containerfile.salt-minion`)
+are a third, **derived** family: they build `FROM systemd-almalinux` rather than
+from a distro base, and inherit its CA trust, Nexus repos, masked-units list and
+journald drop-in instead of repeating any of it.
 
 ## Build commands
 
@@ -29,16 +40,26 @@ podman build -t systemd-fedora:latest -t systemd-fedora:44 -f Containerfile.fedo
 
 # Ubuntu (default and only supported VERSION=26.04)
 podman build -t systemd-ubuntu:latest -t systemd-ubuntu:26.04 -f Containerfile.ubuntu .
+
+# salt-controller (default SALT_VERSION=3006.27; supported: 3006.27, 3006.6)
+podman build -t salt-controller:latest -t salt-controller:v3006.27 -f Containerfile.salt-controller .
+podman build -t salt-controller:v3006.6 -f Containerfile.salt-controller --build-arg SALT_VERSION=3006.6 .
+
+# salt-minion (default SALT_VERSION=3006.27; supported: 3006.27, 3006.6)
+podman build -t salt-minion:latest -t salt-minion:v3006.27 -f Containerfile.salt-minion .
+podman build -t salt-minion:v3006.6 -f Containerfile.salt-minion --build-arg SALT_VERSION=3006.6 .
 ```
 
 Run a built image (needs an init-capable container):
 ```bash
-podman run -d --name test --systemd=always systemd-almalinux:10
+podman run -d --name test --systemd=always localhost/systemd-almalinux:10
 ```
 
 Lint (the files carry `hadolint ignore=` directives, so hadolint is the expected linter):
 ```bash
-hadolint Containerfile.almalinux Containerfile.rockylinux Containerfile.fedora Containerfile.debian Containerfile.ubuntu
+hadolint Containerfile.almalinux Containerfile.rockylinux Containerfile.fedora \
+  Containerfile.debian Containerfile.ubuntu \
+  Containerfile.salt-controller Containerfile.salt-minion
 ```
 
 ## Architecture & conventions
@@ -56,3 +77,54 @@ hadolint Containerfile.almalinux Containerfile.rockylinux Containerfile.fedora C
 - **sshd, root password, and the test user are scaffolded but commented out.** The blocks for enabling sshd, setting `PermitRootLogin`, injecting `ROOT_PUBKEY`/`TEST_USER_PUBKEY`, and `ssh-keygen -A` are present but disabled. Uncomment and supply build-args (`ROOT_PUBKEY`, `TEST_USER`, `TEST_USER_PUBKEY`) to produce an SSH-reachable test target. The image does not expose SSH by default.
 
 - **Keep the five Containerfiles parallel.** Within a family they're near-identical (Alma/Rocky/Fedora only differ in `FROM`, package-manager repo config, and gpgkey path — plus Fedora's `dnf` invocations also carry `--setopt=zchunk=False`, a required, non-optional workaround for the `fedora-proxy` Nexus repo not proxying Fedora's `.zck` metadata variant, not something a later parallelism cleanup should strip; Debian/Ubuntu only differ in `FROM` and the sources file). Across families they differ only where the distro forces it (dnf vs apt, `openssh-server` package names, AppStream/BaseOS/CRB/extras — absent on Fedora, whose repo layout is just releases/updates — vs Debian/Ubuntu components, CA path `/etc/pki/ca-trust/...` vs `/usr/local/share/ca-certificates/...`). Apply structural changes (masked-units list, journald drop-in, SSH scaffolding) to all five.
+
+- **The Salt images are derived, not parallel.** `Containerfile.salt-controller`
+  and `Containerfile.salt-minion` build `FROM ${BASE_REGISTRY}systemd-almalinux:${VERSION}`.
+  Do **not** copy the CA, the `systemctl mask` list or the journald drop-in into
+  them — those are inherited, and duplicating them would create a second copy to
+  keep in sync. The "keep the Containerfiles parallel" rule applies *within* the
+  Salt pair, which differs only by package set, master key generation, the
+  auto-accept drop-in, `systemctl enable salt-master`, and `EXPOSE`.
+
+- **`BASE_REGISTRY` defaults to the Nexus docker registry.** The Salt images
+  default to `nexus.tkclabs.io:8443/` so a clean host can build them without
+  building the base first. Pass `--build-arg BASE_REGISTRY=` (empty) to build
+  against a local `systemd-almalinux:${VERSION}`. Changing the base image means
+  rebuilding *and re-pushing* it before the Salt images pick it up.
+
+- **Salt versions are pinned on the dnf command line, not in the repo file.**
+  Unlike the distro repos, `saltproject-rpm-proxy` mirrors a flat, version-agnostic
+  Broadcom repo — one `repodata/` indexing every release. So there is no
+  `files/salt/<version>/`; a single `files/salt/salt.repo` serves every version and
+  `SALT_VERSION` is interpolated into `dnf install salt-master-${SALT_VERSION}`.
+  Adding a new supported version needs no new files, but do verify the packages
+  exist in the mirror first.
+
+- **The Salt signing key is vendored.** Nexus proxies
+  `packages.broadcom.com/artifactory/saltproject-rpm/`, but the signing key lives
+  at `/artifactory/api/security/keypair/SaltProjectKey/public` — outside that path
+  and therefore not reachable through the mirror. It is committed as
+  `files/salt/SALT-PROJECT-GPG-PUBKEY.pgp` (fingerprint
+  `10857FFDD3F91EAE577A21D664CBBC8173D76B3F`) and `COPY`'d to
+  `/etc/pki/rpm-gpg/`, the same pattern as the root CA. Re-fetch and re-verify the
+  fingerprint if Salt rotates it.
+
+- **`auto_accept: True` on the controller is deliberate and test-only.** Any
+  minion that connects gets its key accepted with no operator action. These images
+  exist to be thrown away; never use one as a production master. The master
+  keypair is generated at build time rather than committed, so every build has a
+  distinct master identity and no private key lives in git.
+
+- **The controller runs a minion too.** The target topology is tiered — tier-1
+  controllers manage the minions running on tier-2 controllers, which manage the
+  fleet — so a controller is itself a minion of an upstream controller. Minion
+  config in both images is left at package defaults on purpose (`master: salt`,
+  minion id from hostname); do not add `/etc/salt/minion.d/` drop-ins. Topology is
+  configured at time of use or in a thin layer on top.
+
+- **Images publish to the Nexus docker registry** at `nexus.tkclabs.io:8443`
+  (Nexus `docker-hosted`, docker connector 8444 behind TLS on 8443,
+  `forceBasicAuth`). Credentials are `NEXUS_USER_RW` / `NEXUS_PASS_RW` from
+  `.envrc`. Podman on the lab hosts runs rootless with
+  `short-name-mode = enforcing`, so every image reference must be fully
+  qualified — `localhost/...` locally, `nexus.tkclabs.io:8443/...` once published.
