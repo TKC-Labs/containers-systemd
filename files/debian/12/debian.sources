@@ -1,7 +1,7 @@
 Types: deb
 # http://snapshot.debian.org/archive/debian/20251117T000000Z
 # URIs: http://deb.debian.org/debian
-URIs: https://nexus.tkclabs.io:8443/repository/debian-bookworm/
+URIs: https://nexus.tkclabs.io:8443/repository/debian-bookworm-proxy/
 Suites: bookworm bookworm-updates
 Components: main
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
@@ -9,7 +9,7 @@ Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
 Types: deb
 # http://snapshot.debian.org/archive/debian-security/20251117T000000Z
 # URIs: http://deb.debian.org/debian-security
-URIs: https://nexus.tkclabs.io:8443/repository/debian-security-bookworm/
+URIs: https://nexus.tkclabs.io:8443/repository/debian-bookworm-security-proxy/
 Suites: bookworm-security
 Components: main
 Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg

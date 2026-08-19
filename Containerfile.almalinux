@@ -13,9 +13,9 @@ FROM almalinux:${VERSION}
 ARG VERSION=10
 
 # Setup our local repo mirrors
-# hadolint ignore=SC2005
+COPY files/ca/TKC-Labs-Root-CA-2026-2036.crt /etc/pki/ca-trust/source/anchors/TKC-Labs-Root-CA-2026-2036.crt
+
 RUN rm -f /etc/yum.repos.d/*.repo \
-  && echo "$(curl -s --insecure https://vault.tkclabs.io:8200/v1/root_ca/ca/pem && echo)" > /etc/pki/ca-trust/source/anchors/tkclabs-root-ca.pem \
   && update-ca-trust
 
 COPY files/almalinux/${VERSION}/local.repo /etc/yum.repos.d/local.repo

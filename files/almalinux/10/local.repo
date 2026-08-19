@@ -1,8 +1,8 @@
 [appstream]
 name=AlmaLinux $releasever - AppStream
-mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/appstream
+# mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/appstream
 # baseurl=https://repo.almalinux.org/almalinux/$releasever/AppStream/$basearch/os/
-baseurl=https://nexus.tkclabs.io:8443/repository/almalinux/$releasever/AppStream/$basearch/os/
+baseurl=https://nexus.tkclabs.io:8443/repository/almalinux-proxy/$releasever/AppStream/$basearch/os/
 enabled=1
 gpgcheck=1
 countme=1
@@ -14,7 +14,7 @@ enabled_metadata=1
 name=AlmaLinux $releasever - BaseOS
 # mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/baseos
 # baseurl=https://repo.almalinux.org/almalinux/$releasever/BaseOS/$basearch/os/
-baseurl=https://nexus.tkclabs.io:8443/repository/almalinux/$releasever/BaseOS/$basearch/os/
+baseurl=https://nexus.tkclabs.io:8443/repository/almalinux-proxy/$releasever/BaseOS/$basearch/os/
 enabled=1
 gpgcheck=1
 countme=1
@@ -24,9 +24,9 @@ enabled_metadata=1
 
 [crb]
 name=AlmaLinux $releasever - CRB
-mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/crb
+# mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/crb
 # baseurl=https://repo.almalinux.org/almalinux/$releasever/CRB/$basearch/os/
-baseurl=https://nexus.tkclabs.io:8443/repository/almalinux/$releasever/CRB/$basearch/os/
+baseurl=https://nexus.tkclabs.io:8443/repository/almalinux-proxy/$releasever/CRB/$basearch/os/
 enabled=1
 gpgcheck=1
 countme=1
@@ -36,9 +36,9 @@ enabled_metadata=0
 
 [extras]
 name=AlmaLinux $releasever - Extras
-mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/extras
+# mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/extras
 # baseurl=https://repo.almalinux.org/almalinux/$releasever/extras/$basearch/os/
-baseurl=https://nexus.tkclabs.io:8443/repository/almalinux/$releasever/extras/$basearch/os/
+baseurl=https://nexus.tkclabs.io:8443/repository/almalinux-proxy/$releasever/extras/$basearch/os/
 enabled=1
 gpgcheck=1
 countme=1
