@@ -1,0 +1,80 @@
+# salt-controller
+#
+# A systemd-almalinux test target running salt-master and salt-minion. The minion
+# runs here too because the target topology is tiered: a tier-2 controller is
+# itself a minion of a tier-1 controller. Minion configuration is deliberately
+# left at package defaults (master: salt, minion id from hostname); configure it
+# at run time or in a thin layer on top of this image.
+#
+# salt-syndic and salt-api are installed but not enabled — both need topology
+# specific config (syndic_master, rest_cherrypy + eauth) and fail-loop without it.
+#
+# Build the default image with:
+#   podman build -t salt-controller:latest -t salt-controller:v3006.27 -f Containerfile.salt-controller .
+#
+# Build versioned image with:
+#   podman build -t salt-controller:v3006.6 -f Containerfile.salt-controller --build-arg SALT_VERSION=3006.6 .
+#
+# Build against a locally built base instead of the Nexus registry with:
+#   podman build -t salt-controller:latest -f Containerfile.salt-controller --build-arg BASE_REGISTRY= .
+#
+ARG BASE_REGISTRY=nexus.tkclabs.io:8443/
+ARG VERSION=10
+
+FROM ${BASE_REGISTRY}systemd-almalinux:${VERSION}
+
+ARG SALT_VERSION=3006.27
+
+# ---------------------------------------------------------------------------
+# The TKC Labs root CA, the Nexus AlmaLinux repos, the masked-units list and the
+# journald->console drop-in all come from the base image and are not repeated.
+#
+# Salt RPMs come from the Nexus proxy of the Broadcom repo. That repo is flat and
+# version-agnostic, so the version pin lives on the dnf command line rather than
+# in salt.repo, and one repo file serves every supported Salt version.
+# ---------------------------------------------------------------------------
+COPY files/salt/SALT-PROJECT-GPG-PUBKEY.pgp /etc/pki/rpm-gpg/SALT-PROJECT-GPG-PUBKEY.pgp
+COPY files/salt/salt.repo /etc/yum.repos.d/salt.repo
+
+RUN dnf install -y salt-${SALT_VERSION} \
+  salt-master-${SALT_VERSION} \
+  salt-minion-${SALT_VERSION} \
+  salt-syndic-${SALT_VERSION} \
+  salt-api-${SALT_VERSION} \
+  && dnf clean all \
+  && rm -rf /var/cache/dnf
+
+# ---------------------------------------------------------------------------
+# Bake in a master keypair so the master identity exists before first start.
+# Generated per build rather than committed, so no private key lands in git —
+# but the resulting master.pem is baked into an image layer and therefore
+# ships inside every copy of the published image. Anyone with pull access to
+# salt-controller on Nexus holds the master's private key and can impersonate
+# this master to any minion that has already trusted it. This is acceptable
+# only because these are disposable test targets; never point one at anything
+# whose compromise matters.
+#
+# This RUN is also a fixed instruction, so it is subject to podman's layer
+# cache: a rebuild that doesn't invalidate anything above it (no Containerfile
+# or files/ change) replays the cached layer and produces the identical key,
+# not a new identity. Use `podman build --no-cache` (or otherwise force a
+# cache miss on this layer) if a fresh master identity is actually required.
+# ---------------------------------------------------------------------------
+RUN mkdir -p /etc/salt/pki/master \
+  && salt-key --gen-keys=master --gen-keys-dir=/etc/salt/pki/master \
+  && chmod 0400 /etc/salt/pki/master/master.pem \
+  && chmod 0644 /etc/salt/pki/master/master.pub
+
+# ---------------------------------------------------------------------------
+# Auto-accept minion keys. This is deliberate and TEST ONLY: any minion that
+# connects gets its key accepted with no operator action. Never use this image
+# as a production master.
+# ---------------------------------------------------------------------------
+RUN mkdir -p /etc/salt/master.d && \
+    printf '%s\n' 'auto_accept: True' > /etc/salt/master.d/auto-accept.conf
+
+RUN systemctl enable salt-master.service salt-minion.service
+
+WORKDIR /root
+EXPOSE 4505 4506
+CMD [ "/sbin/init" ]
