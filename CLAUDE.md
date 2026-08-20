@@ -50,9 +50,9 @@ podman build -t salt-minion:latest -t salt-minion:v3006.27 -f Containerfile.salt
 podman build -t salt-minion:v3006.6 -f Containerfile.salt-minion --build-arg SALT_VERSION=3006.6 .
 ```
 
-Run a built image (needs an init-capable container):
+Run a built image (needs an init-capable container; `-t` is required for `podman logs` to capture systemd's console output):
 ```bash
-podman run -d --name test --systemd=always localhost/systemd-almalinux:10
+podman run -d -t --name test --systemd=always localhost/systemd-almalinux:10
 ```
 
 Lint (the files carry `hadolint ignore=` directives, so hadolint is the expected linter):
@@ -72,7 +72,7 @@ hadolint Containerfile.almalinux Containerfile.rockylinux Containerfile.fedora \
 
 - **systemd is aggressively trimmed.** All five Containerfiles `systemctl mask` a large, identical list of units (udevd, journald, logind, networkd, NetworkManager, resolved, auditd, firewalld, chronyd, crond, storage daemons, etc.) to avoid the file-descriptor explosion that kills systemd in containers. Keep this list in sync across all five files when changing it.
 
-- **Logging goes to the console, not journald.** journald is masked, so a `journald.conf.d/container.conf` drop-in forwards remaining systemd output to `/dev/console` (`ForwardToConsole=yes`) so `podman logs` works. This is intentional given journald is disabled.
+- **`podman logs` works because of `-t`, not the journald drop-in.** `systemd-journald.service`/`.socket` are masked, so journald never runs and nothing ever reads the `journald.conf.d/container.conf` drop-in — its `ForwardToConsole=yes` is inert as long as journald stays masked. What actually makes `podman logs` show systemd's boot output is running the container with `-t`: without it, `/dev/console` doesn't exist inside the container and `podman logs` returns nothing; with it, podman creates `/dev/console -> /dev/pts/0` and systemd writes there directly. The drop-in is kept syntactically valid anyway, so it takes effect for free if journald is ever unmasked later.
 
 - **sshd, root password, and the test user are scaffolded but commented out.** The blocks for enabling sshd, setting `PermitRootLogin`, injecting `ROOT_PUBKEY`/`TEST_USER_PUBKEY`, and `ssh-keygen -A` are present but disabled. Uncomment and supply build-args (`ROOT_PUBKEY`, `TEST_USER`, `TEST_USER_PUBKEY`) to produce an SSH-reachable test target. The image does not expose SSH by default.
 

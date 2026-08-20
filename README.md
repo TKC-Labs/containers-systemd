@@ -91,8 +91,11 @@ references must be fully qualified — `localhost/...` for a local build,
 `nexus.tkclabs.io:8443/...` for a published one. A bare `salt-controller:v3006.27`
 fails with `short-name resolution enforced but cannot prompt without a TTY`.
 
+`-t` is required for `podman logs` to show anything: without it `/dev/console`
+doesn't exist in the container, so systemd's boot output has nowhere to land.
+
 ```bash
-podman run -d --name test --systemd=always localhost/systemd-almalinux:10
+podman run -d -t --name test --systemd=always localhost/systemd-almalinux:10
 ```
 
 A minimal two-container Salt lab. The user-defined network is what gives the
@@ -107,11 +110,11 @@ your minions show up in `salt-key -L` as hex ids like `28016f48cf37`.
 ```bash
 podman network create saltdev
 
-podman run -d --name salt-controller --hostname salt-controller \
+podman run -d -t --name salt-controller --hostname salt-controller \
   --network saltdev --network-alias salt \
   --systemd=always localhost/salt-controller:v3006.27
 
-podman run -d --name minion01 --hostname minion01 --network saltdev \
+podman run -d -t --name minion01 --hostname minion01 --network saltdev \
   --systemd=always localhost/salt-minion:v3006.27
 
 podman exec salt-controller salt-key -L
