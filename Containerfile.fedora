@@ -147,17 +147,17 @@ RUN systemctl mask \
 # any remaining systemd log output from eating fds.
 # ---------------------------------------------------------------------------
 RUN mkdir -p /etc/systemd/journald.conf.d && \
-    printf '%s' \
-      '[Journal]\n' \
-      'Storage=volatile\n' \
-      'Compress=no\n' \
-      'SplitMode=none\n' \
-      'RateLimitIntervalSec=0\n' \
-      'RateLimitBurst=0\n' \
-      'ForwardToSyslog=no\n' \
-      'ForwardToConsole=yes\n' \
-      'TTYPath=/dev/console\n' \
-      'MaxLevelConsole=warning\n' \
+    printf '%s\n' \
+      '[Journal]' \
+      'Storage=volatile' \
+      'Compress=no' \
+      'SplitMode=none' \
+      'RateLimitIntervalSec=0' \
+      'RateLimitBurst=0' \
+      'ForwardToSyslog=no' \
+      'ForwardToConsole=yes' \
+      'TTYPath=/dev/console' \
+      'MaxLevelConsole=warning' \
       > /etc/systemd/journald.conf.d/container.conf
 
 WORKDIR /root
