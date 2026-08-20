@@ -51,7 +51,11 @@ podman build -t systemd-ubuntu:latest -t systemd-ubuntu:26.04 -f Containerfile.u
 AlmaLinux 10 systemd container running `salt-master` and `salt-minion`, with a
 master keypair baked in and `auto_accept` enabled. `salt-syndic` and `salt-api`
 are installed but not enabled. Auto-accept is test-only — never use this as a
-production master.
+production master. The baked master private key ships inside the published
+image: anyone with Nexus pull access to `salt-controller` can extract it and
+impersonate the master, and rebuilding does not rotate it unless the key-gen
+layer is actually cache-missed (`podman build --no-cache`). Never point this
+image at anything whose compromise matters.
 
 ```bash
 # Build default image (Salt 3006.27):
@@ -120,12 +124,26 @@ The controller runs a minion of its own by design.
 ## Publishing to Nexus
 
 Images are published to the Nexus private docker registry at
-`nexus.tkclabs.io:8443`. Credentials come from `.envrc`.
+`nexus.tkclabs.io:8443`. Credentials come from `.envrc`, which is gitignored
+and **not** part of a fresh clone — create it yourself with:
+
+```bash
+export NEXUS_USER_RW=<your-nexus-rw-username>
+export NEXUS_PASS_RW=<your-nexus-rw-password>
+```
+
+Get the actual read-write credential values out of band; do not commit
+`.envrc` or remove it from `.gitignore`.
+
+All sixteen references below must exist locally before publishing — in
+particular the `3006.6` builds are a separate command under "Build specific
+version image" above and won't exist if you only ran the default builds.
 
 ```bash
 source .envrc
-podman login nexus.tkclabs.io:8443 -u "$NEXUS_USER_RW" -p "$NEXUS_PASS_RW"
+printf '%s' "$NEXUS_PASS_RW" | podman login nexus.tkclabs.io:8443 -u "$NEXUS_USER_RW" --password-stdin
 
+set -e
 for ref in \
   systemd-almalinux:latest systemd-almalinux:10 \
   systemd-rockylinux:latest systemd-rockylinux:10 \
@@ -135,7 +153,7 @@ for ref in \
   salt-controller:latest salt-controller:v3006.27 salt-controller:v3006.6 \
   salt-minion:latest salt-minion:v3006.27 salt-minion:v3006.6 \
 ; do
-  podman tag "localhost/${ref}" "nexus.tkclabs.io:8443/${ref}"
-  podman push "nexus.tkclabs.io:8443/${ref}"
+  podman tag "localhost/${ref}" "nexus.tkclabs.io:8443/${ref}" && \
+    podman push "nexus.tkclabs.io:8443/${ref}"
 done
 ```

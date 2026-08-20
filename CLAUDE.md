@@ -112,8 +112,20 @@ hadolint Containerfile.almalinux Containerfile.rockylinux Containerfile.fedora \
 - **`auto_accept: True` on the controller is deliberate and test-only.** Any
   minion that connects gets its key accepted with no operator action. These images
   exist to be thrown away; never use one as a production master. The master
-  keypair is generated at build time rather than committed, so every build has a
-  distinct master identity and no private key lives in git.
+  keypair is generated at build time rather than committed, so no private key
+  lands in git — but that is not the same as the key being secret. The generated
+  `master.pem` is baked into an image layer and ships inside every copy of the
+  published `salt-controller` image on Nexus: anyone with pull access to
+  `nexus.tkclabs.io:8443/salt-controller` holds the master's private key and can
+  stand up an impostor master that any minion which has already trusted that tag
+  will accept silently. Treat the published image itself as holding a live
+  credential, not just a test fixture. Nor does every build get a fresh identity:
+  `salt-key --gen-keys` sits behind a fixed `RUN` line, so a rebuild that hits
+  podman's layer cache (no change to anything above it in the Containerfile)
+  reuses the cached layer and produces the *same* `master.pem` as before. A new
+  master identity requires a cache miss on that layer — e.g. `podman build
+  --no-cache` — not merely re-running the build command. Never point one of these
+  controllers at anything whose compromise would matter.
 
 - **The controller runs a minion too.** The target topology is tiered — tier-1
   controllers manage the minions running on tier-2 controllers, which manage the
@@ -125,6 +137,10 @@ hadolint Containerfile.almalinux Containerfile.rockylinux Containerfile.fedora \
 - **Images publish to the Nexus docker registry** at `nexus.tkclabs.io:8443`
   (Nexus `docker-hosted`, docker connector 8444 behind TLS on 8443,
   `forceBasicAuth`). Credentials are `NEXUS_USER_RW` / `NEXUS_PASS_RW` from
-  `.envrc`. Podman on the lab hosts runs rootless with
+  `.envrc`, which is gitignored and must be created locally — it is not
+  committed and there is no template for it in the repo. Never pass
+  `NEXUS_PASS_RW` via `podman login -p` on the command line; it lands in shell
+  history and `/proc/<pid>/cmdline`. Use `podman login --password-stdin`
+  instead. Podman on the lab hosts runs rootless with
   `short-name-mode = enforcing`, so every image reference must be fully
   qualified — `localhost/...` locally, `nexus.tkclabs.io:8443/...` once published.

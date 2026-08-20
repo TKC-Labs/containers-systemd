@@ -46,9 +46,19 @@ RUN dnf install -y salt-${SALT_VERSION} \
 
 # ---------------------------------------------------------------------------
 # Bake in a master keypair so the master identity exists before first start.
-# Generated per build rather than committed, so no private key lands in git.
-# Each build therefore gets its own master identity, which is fine for the
-# ephemeral test containers these images are for.
+# Generated per build rather than committed, so no private key lands in git —
+# but the resulting master.pem is baked into an image layer and therefore
+# ships inside every copy of the published image. Anyone with pull access to
+# salt-controller on Nexus holds the master's private key and can impersonate
+# this master to any minion that has already trusted it. This is acceptable
+# only because these are disposable test targets; never point one at anything
+# whose compromise matters.
+#
+# This RUN is also a fixed instruction, so it is subject to podman's layer
+# cache: a rebuild that doesn't invalidate anything above it (no Containerfile
+# or files/ change) replays the cached layer and produces the identical key,
+# not a new identity. Use `podman build --no-cache` (or otherwise force a
+# cache miss on this layer) if a fresh master identity is actually required.
 # ---------------------------------------------------------------------------
 RUN mkdir -p /etc/salt/pki/master \
   && salt-key --gen-keys=master --gen-keys-dir=/etc/salt/pki/master \
